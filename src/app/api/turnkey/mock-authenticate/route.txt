@@ -1,0 +1,251 @@
+// import { NextRequest, NextResponse } from "next/server";
+// import { User } from "@/stores/turnkey/use-turnkey.store";
+// import { ApiKeyStamper, TApiKeyStamperConfig } from "@turnkey/sdk-browser";
+// import { createActivityPoller, TurnkeyClient } from "@turnkey/http";
+
+// export interface AuthenticateRequest {
+//   publicKey: string;
+// }
+
+// export interface MockAuthenticateTurnkeyResponse {
+//   data: User | null;
+//   success: boolean;
+//   error: string | null;
+// }
+
+// const getSubOrgByPublicKey = async (
+//   client: TurnkeyClient,
+//   publicKey: string,
+// ) => {
+//   const subOrg = await client.getSubOrgIds({
+//     organizationId: process.env.TURNKEY_ORGANIZATION_ID || "",
+//     filterType: "PUBLIC_KEY",
+//     filterValue: publicKey,
+//   });
+//   return subOrg;
+// };
+
+// const createAPIKeyStamper = () => {
+//   const apiPublicKey = process.env.TURNKEY_API_PUBLIC_KEY!;
+//   const apiPrivateKey = process.env.TURNKEY_API_PRIVATE_KEY!;
+
+//   if (!(apiPublicKey && apiPrivateKey)) {
+//     throw "Error must provide `apiPublicKey` and `apiPrivateKey` or define `TURNKEY_API_PUBLIC_KEY` and `TURNKEY_API_PRIVATE_KEY` in your .env file";
+//   }
+
+//   return new ApiKeyStamper({
+//     apiPublicKey,
+//     apiPrivateKey,
+//   });
+// };
+
+// // export enum ChainType {
+// //   EVM = "evm",
+// //   SOLANA = "solana",
+// // }
+
+// export type Attestation = Parameters<
+//   TurnkeyClient["createSubOrganization"]
+// >[0]["parameters"]["rootUsers"][0]["authenticators"][0]["attestation"];
+
+// export const CURVE_TYPE_ED25519 = "API_KEY_CURVE_ED25519" as any;
+// export const CURVE_TYPE_SECP256K1 = "API_KEY_CURVE_SECP256K1" as any;
+
+// export const createUserSubOrg = async ({
+//   challenge,
+//   attestation,
+//   publicKey,
+// }: {
+//   challenge?: string;
+//   attestation?: Attestation;
+//   publicKey?: string | null;
+// }): Promise<{
+//   organizationId?: string;
+//   subOrganizationId?: string;
+//   addresses: string[];
+//   address?: string;
+// }> => {
+//   const stamper = await createAPIKeyStamper();
+
+//   const client = new TurnkeyClient(
+//     {
+//       baseUrl: process.env.TURNKEY_API_BASE_URL || "https://api.turnkey.com",
+//     },
+//     stamper,
+//   );
+
+//   const activityPoller = createActivityPoller({
+//     client,
+//     requestFn: client.createSubOrganization,
+//   });
+
+//   const organizationId = process.env.TURNKEY_ORGANIZATION_ID || "";
+
+//   const timestampMs = String(Date.now());
+
+//   const userName = publicKey;
+
+//   const curveType = CURVE_TYPE_ED25519;
+
+//   const authenticators =
+//     challenge && attestation
+//       ? [
+//           {
+//             authenticatorName: "Passkey",
+//             challenge,
+//             attestation,
+//           },
+//         ]
+//       : [];
+
+//   const apiKeys = publicKey
+//     ? [
+//         {
+//           apiKeyName: "Public Key",
+//           publicKey,
+//           curveType,
+//         },
+//       ]
+//     : [];
+
+//   // Define wallet accounts based on chain type
+//   const walletAccounts = [
+//     {
+//       curve: "CURVE_ED25519",
+//       pathFormat: "PATH_FORMAT_BIP32",
+//       path: "m/44'/501'/0'/0'",
+//       addressFormat: "ADDRESS_FORMAT_SOLANA",
+//     },
+//   ];
+
+//   const completedActivity = await activityPoller({
+//     type: "ACTIVITY_TYPE_CREATE_SUB_ORGANIZATION_V7" as any,
+//     timestampMs,
+//     organizationId,
+//     parameters: {
+//       subOrganizationName: `SB${userName}`,
+//       rootQuorumThreshold: 1,
+//       rootUsers: [
+//         {
+//           userName: userName!,
+//           userEmail: undefined,
+//           oauthProviders: [],
+//           authenticators,
+//           apiKeys,
+//         },
+//       ],
+//       wallet: {
+//         walletName: "W1",
+//         accounts: walletAccounts as any,
+//       },
+//     },
+//   }).catch((error) => {
+//     console.error(error);
+//   });
+
+//   const { subOrganizationId, wallet } =
+//     completedActivity?.result.createSubOrganizationResultV7 || {};
+
+//   const { addresses, walletId } = wallet || {};
+
+//   return {
+//     organizationId,
+//     subOrganizationId,
+//     addresses: addresses ? addresses : [],
+//     address: addresses?.[0],
+//   };
+// };
+
+// export async function POST(
+//   request: NextRequest,
+// ): Promise<NextResponse<MockAuthenticateTurnkeyResponse>> {
+//   try {
+//     const { publicKey } = await request.json();
+//     const stamper = await createAPIKeyStamper();
+
+//     const client = new TurnkeyClient(
+//       {
+//         baseUrl: process.env.TURNKEY_API_BASE_URL || "https://api.turnkey.com",
+//       },
+//       stamper,
+//     );
+//     const { organizationIds } = await getSubOrgByPublicKey(client, publicKey);
+//     const organizationId = organizationIds[0];
+
+//     let whoami: User | null = null;
+//     let wallet: string[] | null = null;
+
+//     // If organizationId is available, which means the user already has a sub-organization
+//     if (organizationId) {
+//       try {
+//         whoami = await client.getWhoami({
+//           organizationId,
+//         });
+
+//         // Check if user has wallets, if not create one
+//         const wallets = await client.getWallets({
+//           organizationId,
+//         });
+//         const walletAddress = (
+//           await client.getWalletAccounts({
+//             organizationId,
+//             walletId: wallets.wallets[0]?.walletId || "",
+//           })
+//         ).accounts[0]?.address;
+//         console.log("WALLETTTTSSS🧱🧱", wallets.wallets);
+//         if (walletAddress) {
+//           wallet = [walletAddress];
+//         }
+//       } catch (e) {
+//         console.error(e);
+//       }
+//     }
+
+//     // If no organizationId, create a new user sub-organization with wallet
+//     let subOrgId: string | undefined;
+//     if (!whoami) {
+//       try {
+//         const res = await createUserSubOrg({
+//           publicKey,
+//         });
+//         subOrgId = res.subOrganizationId;
+//         wallet = [res.address as string];
+//         console.log("Created user sub-organization with wallet:", res);
+//         if (res.organizationId && res.subOrganizationId) {
+//           const subOrg = await getSubOrgByPublicKey(client, publicKey);
+//           whoami = await client.getWhoami({
+//             organizationId: subOrg.organizationIds[0],
+//           });
+//         } else {
+//           throw new Error("Failed to create user sub-organization");
+//         }
+//       } catch (error) {
+//         console.error("Error creating user sub-organization:", error);
+//       }
+//     }
+
+//     return NextResponse.json({
+//       data: whoami
+//         ? {
+//             ...whoami,
+//             organizationId: subOrgId || whoami.organizationId || "",
+//             organizationName: whoami.organizationName ?? "",
+//             userId: whoami.userId ?? "",
+//             username: whoami.username ?? "",
+//             addresses: wallet || [],
+//           }
+//         : null,
+//       success: true,
+//       error: null,
+//     });
+//   } catch (error) {
+//     console.error("Turnkey authentication error:", error);
+
+//     const response: MockAuthenticateTurnkeyResponse = {
+//       data: null,
+//       success: false,
+//       error: error instanceof Error ? error.message : "Authentication failed",
+//     };
+//     return NextResponse.json(response, { status: 500 });
+//   }
+// }
